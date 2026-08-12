@@ -1,8 +1,12 @@
 /**
- * CẬP NHẬT THÔNG TIN LIÊN HỆ TẠI ĐÂY
- * Giữ chuỗi rỗng nếu bạn chưa muốn hiển thị một kênh liên hệ.
+ * CẬP NHẬT THÔNG TIN LIÊN HỆ TẠI ĐÂY.
+ * Giữ value/url rỗng nếu chưa muốn kích hoạt kênh liên hệ tương ứng.
  */
 const CONTACT = {
+  email: {
+    label: "hello@example.com",
+    value: ""
+  },
   zalo: {
     label: "Thêm số Zalo",
     url: ""
@@ -10,53 +14,46 @@ const CONTACT = {
   phone: {
     label: "Thêm số điện thoại",
     value: ""
-  },
-  email: {
-    label: "hello@example.com",
-    value: ""
   }
 };
 
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const header = document.querySelector("[data-header]");
-const menuToggle = document.querySelector("[data-menu-toggle]");
-const navigation = document.querySelector("[data-navigation]");
-const navigationLinks = [...document.querySelectorAll('.primary-nav a[href^="#"]')];
+const menuButton = document.querySelector("[data-menu-toggle]");
+const mobileNavigation = document.querySelector("[data-mobile-navigation]");
+const navigationLinks = [...document.querySelectorAll('nav a[href^="#"]')];
 
 function setMenu(open) {
-  if (!menuToggle || !navigation) return;
+  if (!menuButton || !mobileNavigation) return;
 
-  menuToggle.setAttribute("aria-expanded", String(open));
-  menuToggle.setAttribute("aria-label", open ? "Đóng menu" : "Mở menu");
-  navigation.classList.toggle("is-open", open);
+  menuButton.setAttribute("aria-expanded", String(open));
+  menuButton.setAttribute("aria-label", open ? "Đóng menu" : "Mở menu");
+  mobileNavigation.classList.toggle("is-open", open);
   document.body.classList.toggle("menu-open", open);
 }
 
-menuToggle?.addEventListener("click", () => {
-  const isOpen = menuToggle.getAttribute("aria-expanded") === "true";
-  setMenu(!isOpen);
+menuButton?.addEventListener("click", () => {
+  setMenu(menuButton.getAttribute("aria-expanded") !== "true");
 });
 
-navigationLinks.forEach((link) => {
-  link.addEventListener("click", () => setMenu(false));
-});
+navigationLinks.forEach((link) => link.addEventListener("click", () => setMenu(false)));
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") setMenu(false);
 });
 
 window.addEventListener("resize", () => {
-  if (window.innerWidth > 992) setMenu(false);
+  if (window.innerWidth > 820) setMenu(false);
 });
 
 function updateHeader() {
-  header?.classList.toggle("is-scrolled", window.scrollY > 12);
+  header?.classList.toggle("is-scrolled", window.scrollY > 10);
 }
 
 updateHeader();
 window.addEventListener("scroll", updateHeader, { passive: true });
 
-// Reveal nhẹ khi nội dung đi vào viewport.
+// Reveal nhẹ khi panel đi vào viewport.
 const revealItems = document.querySelectorAll(".reveal:not(.is-visible)");
 
 if (reducedMotion || !("IntersectionObserver" in window)) {
@@ -70,16 +67,14 @@ if (reducedMotion || !("IntersectionObserver" in window)) {
         observer.unobserve(entry.target);
       });
     },
-    { threshold: 0.12, rootMargin: "0px 0px -40px" }
+    { threshold: 0.12, rootMargin: "0px 0px -36px" }
   );
 
   revealItems.forEach((item) => revealObserver.observe(item));
 }
 
-// Đánh dấu mục điều hướng tương ứng với section đang xem.
-const trackedSections = navigationLinks
-  .map((link) => document.querySelector(link.getAttribute("href")))
-  .filter(Boolean);
+// Đồng bộ mục đang xem trên floating dock và mobile menu.
+const trackedSections = [...document.querySelectorAll("main > section[id]")];
 
 if ("IntersectionObserver" in window) {
   const sectionObserver = new IntersectionObserver(
@@ -95,66 +90,49 @@ if ("IntersectionObserver" in window) {
         });
       });
     },
-    { rootMargin: "-30% 0px -60%", threshold: 0 }
+    { rootMargin: "-32% 0px -62%", threshold: 0 }
   );
 
   trackedSections.forEach((section) => sectionObserver.observe(section));
 }
 
-// FAQ accordion: chỉ mở một câu trả lời tại một thời điểm.
-const faqButtons = document.querySelectorAll(".faq-item button");
-
-faqButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    const willOpen = button.getAttribute("aria-expanded") !== "true";
-
-    faqButtons.forEach((otherButton) => {
-      const answerId = otherButton.getAttribute("aria-controls");
-      const answer = document.getElementById(answerId);
-      const isTarget = otherButton === button;
-      const shouldOpen = isTarget && willOpen;
-
-      otherButton.setAttribute("aria-expanded", String(shouldOpen));
-      if (answer) answer.hidden = !shouldOpen;
-    });
-  });
-});
-
-// Liên kết dữ liệu cấu hình với phần contact.
-function disablePlaceholderLink(link) {
-  link.setAttribute("href", "#contact");
+function makePlaceholder(link) {
+  link.href = "#contact";
   link.setAttribute("aria-disabled", "true");
   link.addEventListener("click", (event) => event.preventDefault());
 }
 
+function setContactLink(selector, label, href) {
+  const link = document.querySelector(selector);
+  if (!link) return;
+
+  const text = link.querySelector("strong");
+  if (text) text.textContent = label;
+
+  if (href) link.href = href;
+  else makePlaceholder(link);
+}
+
 function applyContactDetails() {
-  const zaloLink = document.querySelector('[data-contact="zalo"]');
-  const phoneLink = document.querySelector('[data-contact="phone"]');
-  const emailLink = document.querySelector('[data-contact="email"]');
+  const cleanPhone = CONTACT.phone.value.replace(/\s/g, "");
+
+  setContactLink(
+    '[data-contact="email"]',
+    CONTACT.email.label,
+    CONTACT.email.value ? `mailto:${CONTACT.email.value}` : ""
+  );
+  setContactLink('[data-contact="zalo"]', CONTACT.zalo.label, CONTACT.zalo.url);
+  setContactLink(
+    '[data-contact="phone"]',
+    CONTACT.phone.label,
+    cleanPhone ? `tel:${cleanPhone}` : ""
+  );
+
   const emailCta = document.querySelector('[data-contact="email-cta"]');
+  if (!emailCta) return;
 
-  if (zaloLink) {
-    zaloLink.querySelector("strong").textContent = CONTACT.zalo.label;
-    if (CONTACT.zalo.url) zaloLink.href = CONTACT.zalo.url;
-    else disablePlaceholderLink(zaloLink);
-  }
-
-  if (phoneLink) {
-    phoneLink.querySelector("strong").textContent = CONTACT.phone.label;
-    if (CONTACT.phone.value) phoneLink.href = `tel:${CONTACT.phone.value.replace(/\s/g, "")}`;
-    else disablePlaceholderLink(phoneLink);
-  }
-
-  if (emailLink) {
-    emailLink.querySelector("strong").textContent = CONTACT.email.label;
-    if (CONTACT.email.value) emailLink.href = `mailto:${CONTACT.email.value}`;
-    else disablePlaceholderLink(emailLink);
-  }
-
-  if (emailCta) {
-    if (CONTACT.email.value) emailCta.href = `mailto:${CONTACT.email.value}`;
-    else disablePlaceholderLink(emailCta);
-  }
+  if (CONTACT.email.value) emailCta.href = `mailto:${CONTACT.email.value}`;
+  else makePlaceholder(emailCta);
 }
 
 applyContactDetails();

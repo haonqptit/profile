@@ -1,64 +1,161 @@
+"use strict";
+
 /**
- * CẬP NHẬT THÔNG TIN LIÊN HỆ TẠI ĐÂY.
- * Giữ value/url rỗng nếu chưa muốn kích hoạt kênh liên hệ tương ứng.
+ * Cấu hình thông tin liên hệ tại một nơi duy nhất.
+ * Các phần tử có data-contact-link / data-contact-label sẽ được đồng bộ tự động.
  */
-const CONTACT = {
+const CONTACT = Object.freeze({
   email: {
-    label: "hello@example.com",
-    value: ""
-  },
-  zalo: {
-    label: "Thêm số Zalo",
-    url: ""
+    label: "haonqptit@gmail.com",
+    href: "mailto:haonqptit@gmail.com"
   },
   phone: {
-    label: "Thêm số điện thoại",
-    value: ""
+    label: "0394 760 406",
+    href: "tel:+84394760406"
+  },
+  instagram: {
+    label: "@ngqhao04",
+    href: "https://www.instagram.com/ngqhao04/",
+    external: true
   }
-};
+});
 
-const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-const header = document.querySelector("[data-header]");
-const menuButton = document.querySelector("[data-menu-toggle]");
-const mobileNavigation = document.querySelector("[data-mobile-navigation]");
-const navigationLinks = [...document.querySelectorAll('nav a[href^="#"]')];
+const root = document.documentElement;
+const body = document.body;
+const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-function setMenu(open) {
-  if (!menuButton || !mobileNavigation) return;
+function applyContactDetails() {
+  Object.entries(CONTACT).forEach(([channel, details]) => {
+    document.querySelectorAll(`[data-contact-link="${channel}"]`).forEach((link) => {
+      link.href = details.href;
 
-  menuButton.setAttribute("aria-expanded", String(open));
-  menuButton.setAttribute("aria-label", open ? "Đóng menu" : "Mở menu");
-  mobileNavigation.classList.toggle("is-open", open);
-  document.body.classList.toggle("menu-open", open);
+      if (details.external) {
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+      }
+    });
+
+    document.querySelectorAll(`[data-contact-label="${channel}"]`).forEach((label) => {
+      label.textContent = details.label;
+    });
+  });
 }
 
-menuButton?.addEventListener("click", () => {
-  setMenu(menuButton.getAttribute("aria-expanded") !== "true");
-});
+function initMobileMenu() {
+  const menuButton = document.querySelector("[data-menu-toggle]");
+  const mobileMenu = document.querySelector("[data-mobile-menu]");
+  const mobileNavigation = document.querySelector("#mobile-navigation");
+  const closeButton = document.querySelector("[data-menu-close]");
 
-navigationLinks.forEach((link) => link.addEventListener("click", () => setMenu(false)));
+  if (!menuButton || !mobileMenu || !mobileNavigation) return;
 
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") setMenu(false);
-});
+  const menuLinks = [...mobileNavigation.querySelectorAll('a[href^="#"]')];
+  let menuOpen = false;
+  let lastFocusedElement = null;
 
-window.addEventListener("resize", () => {
-  if (window.innerWidth > 820) setMenu(false);
-});
+  function setMenuTabState(open) {
+    menuLinks.forEach((link) => {
+      if (open) link.removeAttribute("tabindex");
+      else link.setAttribute("tabindex", "-1");
+    });
+  }
 
-function updateHeader() {
-  header?.classList.toggle("is-scrolled", window.scrollY > 10);
+  function focusSectionFromLink(link) {
+    const target = document.querySelector(link.hash);
+    if (!target) return;
+
+    target.setAttribute("tabindex", "-1");
+    target.focus({ preventScroll: true });
+    target.addEventListener(
+      "blur",
+      () => {
+        target.removeAttribute("tabindex");
+      },
+      { once: true }
+    );
+  }
+
+  function setMenu(open, options = {}) {
+    const { restoreFocus = true } = options;
+    if (menuOpen === open) return;
+
+    menuOpen = open;
+    menuButton.setAttribute("aria-expanded", String(open));
+    menuButton.setAttribute("aria-label", open ? "Đóng menu" : "Mở menu");
+    mobileMenu.setAttribute("aria-hidden", String(!open));
+    mobileMenu.inert = !open;
+    setMenuTabState(open);
+    body.classList.toggle("menu-open", open);
+
+    if (open) {
+      lastFocusedElement = document.activeElement;
+      window.setTimeout(() => menuLinks[0]?.focus(), 80);
+    } else if (restoreFocus) {
+      const focusTarget =
+        lastFocusedElement instanceof HTMLElement && document.contains(lastFocusedElement)
+          ? lastFocusedElement
+          : menuButton;
+      focusTarget.focus();
+    }
+  }
+
+  mobileMenu.inert = true;
+  setMenuTabState(false);
+
+  menuButton.addEventListener("click", () => setMenu(!menuOpen));
+  closeButton?.addEventListener("click", () => setMenu(false));
+
+  menuLinks.forEach((link) => {
+    link.addEventListener("click", () => {
+      setMenu(false, { restoreFocus: false });
+      window.setTimeout(() => focusSectionFromLink(link), 0);
+    });
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (!menuOpen) return;
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setMenu(false);
+      return;
+    }
+
+    if (event.key !== "Tab" || menuLinks.length === 0) return;
+
+    const firstLink = menuLinks[0];
+    const lastLink = menuLinks[menuLinks.length - 1];
+
+    if (event.shiftKey && document.activeElement === firstLink) {
+      event.preventDefault();
+      lastLink.focus();
+    } else if (!event.shiftKey && document.activeElement === lastLink) {
+      event.preventDefault();
+      firstLink.focus();
+    }
+  });
+
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 900 && menuOpen) {
+      setMenu(false, { restoreFocus: false });
+    }
+  });
 }
 
-updateHeader();
-window.addEventListener("scroll", updateHeader, { passive: true });
+function initMotion() {
+  const revealItems = [
+    ...document.querySelectorAll(".reveal, .reveal-left, .reveal-right, .reveal-scale")
+  ];
+  const heroStaggers = document.querySelectorAll("[data-hero].stagger");
+  const canObserve = "IntersectionObserver" in window;
 
-// Reveal nhẹ khi panel đi vào viewport.
-const revealItems = document.querySelectorAll(".reveal:not(.is-visible)");
+  if (reducedMotionQuery.matches || !canObserve) {
+    revealItems.forEach((item) => item.classList.add("is-visible"));
+    heroStaggers.forEach((item) => item.classList.add("is-visible"));
+    body.classList.add("is-ready");
+    return;
+  }
 
-if (reducedMotion || !("IntersectionObserver" in window)) {
-  revealItems.forEach((item) => item.classList.add("is-visible"));
-} else {
   const revealObserver = new IntersectionObserver(
     (entries, observer) => {
       entries.forEach((entry) => {
@@ -67,72 +164,170 @@ if (reducedMotion || !("IntersectionObserver" in window)) {
         observer.unobserve(entry.target);
       });
     },
-    { threshold: 0.12, rootMargin: "0px 0px -36px" }
+    {
+      threshold: 0.12,
+      rootMargin: "0px 0px -8% 0px"
+    }
   );
 
-  revealItems.forEach((item) => revealObserver.observe(item));
+  revealItems.forEach((item) => {
+    const rect = item.getBoundingClientRect();
+    if (rect.top < window.innerHeight * 0.92) item.classList.add("is-visible");
+    else revealObserver.observe(item);
+  });
+
+  root.classList.add("motion-ready");
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      body.classList.add("is-ready");
+      heroStaggers.forEach((item) => item.classList.add("is-visible"));
+    });
+  });
 }
 
-// Đồng bộ mục đang xem trên floating dock và mobile menu.
-const trackedSections = [...document.querySelectorAll("main > section[id]")];
+function initScrollUI() {
+  const header = document.querySelector("[data-header]");
+  const progressBar = document.querySelector("[data-scroll-progress]");
+  const sections = [...document.querySelectorAll("[data-section][id]")];
+  const navigationLinks = [...document.querySelectorAll("[data-nav-link][href^='#']")];
+  const processTrack = document.querySelector("[data-process-track]");
+  const processSteps = processTrack
+    ? [...processTrack.querySelectorAll("[data-process-step]")]
+    : [];
 
-if ("IntersectionObserver" in window) {
-  const sectionObserver = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
+  let sectionPositions = [];
+  let processCenters = [];
+  let scheduledFrame = 0;
+  let currentSectionId = "";
 
-        navigationLinks.forEach((link) => {
-          const isCurrent = link.getAttribute("href") === `#${entry.target.id}`;
-          link.classList.toggle("is-active", isCurrent);
-          if (isCurrent) link.setAttribute("aria-current", "location");
-          else link.removeAttribute("aria-current");
-        });
-      });
-    },
-    { rootMargin: "-32% 0px -62%", threshold: 0 }
-  );
+  function measurePage() {
+    const scrollTop = window.scrollY;
+    sectionPositions = sections.map((section) => ({
+      id: section.id,
+      top: section.getBoundingClientRect().top + scrollTop
+    }));
 
-  trackedSections.forEach((section) => sectionObserver.observe(section));
+    if (processTrack) {
+      const trackTop = processTrack.getBoundingClientRect().top + scrollTop;
+      processCenters = processSteps.map((step) => trackTop + step.offsetTop + 30);
+    }
+  }
+
+  function setActiveSection(sectionId) {
+    if (!sectionId || sectionId === currentSectionId) return;
+    currentSectionId = sectionId;
+
+    navigationLinks.forEach((link) => {
+      const isCurrent = link.getAttribute("href") === `#${sectionId}`;
+      link.classList.toggle("is-active", isCurrent);
+      if (isCurrent) link.setAttribute("aria-current", "location");
+      else link.removeAttribute("aria-current");
+    });
+  }
+
+  function updateProcess(markerPosition) {
+    if (!processTrack || processCenters.length === 0) return;
+
+    const firstCenter = processCenters[0];
+    const lastCenter = processCenters[processCenters.length - 1];
+    const distance = Math.max(lastCenter - firstCenter, 1);
+    const progress = Math.min(Math.max((markerPosition - firstCenter) / distance, 0), 1);
+    processTrack.style.setProperty("--process-progress", progress.toFixed(4));
+
+    let activeIndex = 0;
+    processCenters.forEach((center, index) => {
+      if (markerPosition >= center - 24) activeIndex = index;
+    });
+
+    processSteps.forEach((step, index) => {
+      const isActive = index === activeIndex;
+      step.classList.toggle("is-active", isActive);
+      if (isActive) step.setAttribute("aria-current", "step");
+      else step.removeAttribute("aria-current");
+    });
+  }
+
+  function updateScrollUI() {
+    scheduledFrame = 0;
+    const scrollTop = window.scrollY;
+    const activationPoint = scrollTop + window.innerHeight * 0.42;
+    const processMarker = scrollTop + window.innerHeight * 0.56;
+    const scrollableHeight = document.documentElement.scrollHeight - window.innerHeight;
+    const pageProgress = scrollableHeight > 0 ? scrollTop / scrollableHeight : 0;
+
+    header?.classList.toggle("is-scrolled", scrollTop > 12);
+    if (progressBar) {
+      progressBar.style.transform = `scaleX(${Math.min(Math.max(pageProgress, 0), 1)})`;
+    }
+
+    let activeSection = sectionPositions[0]?.id || "";
+    sectionPositions.forEach((section) => {
+      if (section.top <= activationPoint) activeSection = section.id;
+    });
+
+    setActiveSection(activeSection);
+    updateProcess(processMarker);
+  }
+
+  function requestScrollUpdate() {
+    if (scheduledFrame) return;
+    scheduledFrame = window.requestAnimationFrame(updateScrollUI);
+  }
+
+  function remeasure() {
+    measurePage();
+    requestScrollUpdate();
+  }
+
+  measurePage();
+  updateScrollUI();
+
+  window.addEventListener("scroll", requestScrollUpdate, { passive: true });
+  window.addEventListener("resize", remeasure);
+  window.addEventListener("load", remeasure, { once: true });
+
+  if ("ResizeObserver" in window) {
+    const pageResizeObserver = new ResizeObserver(remeasure);
+    pageResizeObserver.observe(document.body);
+  }
 }
 
-function makePlaceholder(link) {
-  link.href = "#contact";
-  link.setAttribute("aria-disabled", "true");
-  link.addEventListener("click", (event) => event.preventDefault());
+function initCardGlow() {
+  const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
+  if (!finePointer.matches) return;
+
+  document.querySelectorAll(".capability-card").forEach((card) => {
+    card.addEventListener("pointermove", (event) => {
+      const rect = card.getBoundingClientRect();
+      card.style.setProperty("--pointer-x", `${event.clientX - rect.left}px`);
+      card.style.setProperty("--pointer-y", `${event.clientY - rect.top}px`);
+    });
+  });
 }
 
-function setContactLink(selector, label, href) {
-  const link = document.querySelector(selector);
-  if (!link) return;
+function initLocalTime() {
+  const timeElement = document.querySelector("[data-local-time]");
+  if (!timeElement || !("Intl" in window)) return;
 
-  const text = link.querySelector("strong");
-  if (text) text.textContent = label;
+  const formatter = new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
 
-  if (href) link.href = href;
-  else makePlaceholder(link);
-}
+  const updateTime = () => {
+    timeElement.textContent = `${formatter.format(new Date())} · GMT+7`;
+  };
 
-function applyContactDetails() {
-  const cleanPhone = CONTACT.phone.value.replace(/\s/g, "");
-
-  setContactLink(
-    '[data-contact="email"]',
-    CONTACT.email.label,
-    CONTACT.email.value ? `mailto:${CONTACT.email.value}` : ""
-  );
-  setContactLink('[data-contact="zalo"]', CONTACT.zalo.label, CONTACT.zalo.url);
-  setContactLink(
-    '[data-contact="phone"]',
-    CONTACT.phone.label,
-    cleanPhone ? `tel:${cleanPhone}` : ""
-  );
-
-  const emailCta = document.querySelector('[data-contact="email-cta"]');
-  if (!emailCta) return;
-
-  if (CONTACT.email.value) emailCta.href = `mailto:${CONTACT.email.value}`;
-  else makePlaceholder(emailCta);
+  updateTime();
+  window.setInterval(updateTime, 60_000);
 }
 
 applyContactDetails();
+initMobileMenu();
+initScrollUI();
+initCardGlow();
+initLocalTime();
+initMotion();

@@ -1,119 +1,87 @@
 "use strict";
 
-/**
- * Cấu hình thông tin liên hệ tại một nơi duy nhất.
- * Các phần tử có data-contact-link / data-contact-label sẽ được đồng bộ tự động.
- */
-const CONTACT = Object.freeze({
-  email: {
-    label: "haonqptit@gmail.com",
-    href: "mailto:haonqptit@gmail.com"
-  },
-  phone: {
-    label: "0394 760 406",
-    href: "tel:+84394760406"
-  },
-  instagram: {
-    label: "@ngqhao04",
-    href: "https://www.instagram.com/ngqhao04/",
-    external: true
-  }
-});
-
 const root = document.documentElement;
 const body = document.body;
-const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-function applyContactDetails() {
-  Object.entries(CONTACT).forEach(([channel, details]) => {
-    document.querySelectorAll(`[data-contact-link="${channel}"]`).forEach((link) => {
-      link.href = details.href;
+function focusSection(hash) {
+  if (!hash || hash === "#") return;
 
-      if (details.external) {
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-      }
-    });
+  const target = document.querySelector(hash);
+  if (!target) return;
 
-    document.querySelectorAll(`[data-contact-label="${channel}"]`).forEach((label) => {
-      label.textContent = details.label;
-    });
-  });
+  target.setAttribute("tabindex", "-1");
+  target.focus({ preventScroll: true });
+  target.addEventListener(
+    "blur",
+    () => target.removeAttribute("tabindex"),
+    { once: true }
+  );
 }
 
 function initMobileMenu() {
-  const menuButton = document.querySelector("[data-menu-toggle]");
-  const mobileMenu = document.querySelector("[data-mobile-menu]");
-  const mobileNavigation = document.querySelector("#mobile-navigation");
-  const closeButton = document.querySelector("[data-menu-close]");
+  const toggle = document.querySelector("[data-menu-toggle]");
+  const menu = document.querySelector("[data-mobile-menu]");
+  const navigation = document.querySelector("#mobile-navigation");
+  const backdrop = document.querySelector("[data-menu-close]");
 
-  if (!menuButton || !mobileMenu || !mobileNavigation) return;
+  if (!toggle || !menu || !navigation) return;
 
-  const menuLinks = [...mobileNavigation.querySelectorAll('a[href^="#"]')];
-  let menuOpen = false;
-  let lastFocusedElement = null;
+  const links = [...navigation.querySelectorAll("a")];
+  const sectionLinks = links.filter((link) => link.hash);
+  let isOpen = false;
+  let previousFocus = null;
 
-  function setMenuTabState(open) {
-    menuLinks.forEach((link) => {
+  function updateLinkTabs(open) {
+    links.forEach((link) => {
       if (open) link.removeAttribute("tabindex");
       else link.setAttribute("tabindex", "-1");
     });
   }
 
-  function focusSectionFromLink(link) {
-    const target = document.querySelector(link.hash);
-    if (!target) return;
+  function setMenu(open, restoreFocus = true) {
+    if (isOpen === open) return;
+    isOpen = open;
 
-    target.setAttribute("tabindex", "-1");
-    target.focus({ preventScroll: true });
-    target.addEventListener(
-      "blur",
-      () => {
-        target.removeAttribute("tabindex");
-      },
-      { once: true }
-    );
-  }
-
-  function setMenu(open, options = {}) {
-    const { restoreFocus = true } = options;
-    if (menuOpen === open) return;
-
-    menuOpen = open;
-    menuButton.setAttribute("aria-expanded", String(open));
-    menuButton.setAttribute("aria-label", open ? "Đóng menu" : "Mở menu");
-    mobileMenu.setAttribute("aria-hidden", String(!open));
-    mobileMenu.inert = !open;
-    setMenuTabState(open);
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+    menu.setAttribute("aria-hidden", String(!open));
+    menu.inert = !open;
     body.classList.toggle("menu-open", open);
+    updateLinkTabs(open);
 
     if (open) {
-      lastFocusedElement = document.activeElement;
-      window.setTimeout(() => menuLinks[0]?.focus(), 80);
+      previousFocus = document.activeElement;
+      window.setTimeout(() => links[0]?.focus(), 100);
     } else if (restoreFocus) {
       const focusTarget =
-        lastFocusedElement instanceof HTMLElement && document.contains(lastFocusedElement)
-          ? lastFocusedElement
-          : menuButton;
+        previousFocus instanceof HTMLElement && document.contains(previousFocus)
+          ? previousFocus
+          : toggle;
       focusTarget.focus();
     }
   }
 
-  mobileMenu.inert = true;
-  setMenuTabState(false);
+  menu.inert = true;
+  updateLinkTabs(false);
 
-  menuButton.addEventListener("click", () => setMenu(!menuOpen));
-  closeButton?.addEventListener("click", () => setMenu(false));
+  toggle.addEventListener("click", () => setMenu(!isOpen));
+  backdrop?.addEventListener("click", () => setMenu(false));
 
-  menuLinks.forEach((link) => {
+  sectionLinks.forEach((link) => {
     link.addEventListener("click", () => {
-      setMenu(false, { restoreFocus: false });
-      window.setTimeout(() => focusSectionFromLink(link), 0);
+      const hash = link.hash;
+      setMenu(false, false);
+      window.setTimeout(() => focusSection(hash), 450);
     });
   });
 
+  links
+    .filter((link) => !link.hash)
+    .forEach((link) => link.addEventListener("click", () => setMenu(false)));
+
   document.addEventListener("keydown", (event) => {
-    if (!menuOpen) return;
+    if (!isOpen) return;
 
     if (event.key === "Escape") {
       event.preventDefault();
@@ -121,213 +89,139 @@ function initMobileMenu() {
       return;
     }
 
-    if (event.key !== "Tab" || menuLinks.length === 0) return;
+    if (event.key !== "Tab") return;
 
-    const firstLink = menuLinks[0];
-    const lastLink = menuLinks[menuLinks.length - 1];
+    const focusable = [toggle, ...links];
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
 
-    if (event.shiftKey && document.activeElement === firstLink) {
+    if (event.shiftKey && document.activeElement === first) {
       event.preventDefault();
-      lastLink.focus();
-    } else if (!event.shiftKey && document.activeElement === lastLink) {
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
       event.preventDefault();
-      firstLink.focus();
+      first.focus();
     }
   });
 
   window.addEventListener("resize", () => {
-    if (window.innerWidth > 900 && menuOpen) {
-      setMenu(false, { restoreFocus: false });
-    }
+    if (window.innerWidth > 1080 && isOpen) setMenu(false, false);
   });
 }
 
-function initMotion() {
-  const revealItems = [
-    ...document.querySelectorAll(".reveal, .reveal-left, .reveal-right, .reveal-scale")
-  ];
-  const heroStaggers = document.querySelectorAll("[data-hero].stagger");
-  const canObserve = "IntersectionObserver" in window;
+function initRevealMotion() {
+  const revealItems = [...document.querySelectorAll("[data-reveal]")];
 
-  if (reducedMotionQuery.matches || !canObserve) {
+  if (reducedMotion.matches || !("IntersectionObserver" in window)) {
     revealItems.forEach((item) => item.classList.add("is-visible"));
-    heroStaggers.forEach((item) => item.classList.add("is-visible"));
     body.classList.add("is-ready");
     return;
   }
 
-  const revealObserver = new IntersectionObserver(
-    (entries, observer) => {
+  const observer = new IntersectionObserver(
+    (entries, currentObserver) => {
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return;
         entry.target.classList.add("is-visible");
-        observer.unobserve(entry.target);
+        currentObserver.unobserve(entry.target);
       });
     },
-    {
-      threshold: 0.12,
-      rootMargin: "0px 0px -8% 0px"
-    }
+    { threshold: 0.1, rootMargin: "0px 0px -7% 0px" }
   );
 
   revealItems.forEach((item) => {
-    const rect = item.getBoundingClientRect();
-    if (rect.top < window.innerHeight * 0.92) item.classList.add("is-visible");
-    else revealObserver.observe(item);
+    const top = item.getBoundingClientRect().top;
+    if (top < window.innerHeight * 0.94) item.classList.add("is-visible");
+    else observer.observe(item);
   });
 
-  root.classList.add("motion-ready");
-
   window.requestAnimationFrame(() => {
-    window.requestAnimationFrame(() => {
-      body.classList.add("is-ready");
-      heroStaggers.forEach((item) => item.classList.add("is-visible"));
-    });
+    window.requestAnimationFrame(() => body.classList.add("is-ready"));
   });
 }
 
 function initScrollUI() {
   const header = document.querySelector("[data-header]");
-  const progressBar = document.querySelector("[data-scroll-progress]");
+  const progress = document.querySelector("[data-scroll-progress]");
   const sections = [...document.querySelectorAll("[data-section][id]")];
-  const navigationLinks = [...document.querySelectorAll("[data-nav-link][href^='#']")];
-  const processTrack = document.querySelector("[data-process-track]");
-  const processSteps = processTrack
-    ? [...processTrack.querySelectorAll("[data-process-step]")]
-    : [];
+  const navLinks = [...document.querySelectorAll('[data-nav-link][href^="#"]')];
+  let frame = 0;
+  let currentSection = "";
 
-  let sectionPositions = [];
-  let processCenters = [];
-  let scheduledFrame = 0;
-  let currentSectionId = "";
+  function updateNavigation(sectionId) {
+    if (!sectionId || sectionId === currentSection) return;
+    currentSection = sectionId;
 
-  function measurePage() {
-    const scrollTop = window.scrollY;
-    sectionPositions = sections.map((section) => ({
-      id: section.id,
-      top: section.getBoundingClientRect().top + scrollTop
-    }));
-
-    if (processTrack) {
-      const trackTop = processTrack.getBoundingClientRect().top + scrollTop;
-      processCenters = processSteps.map((step) => trackTop + step.offsetTop + 30);
-    }
-  }
-
-  function setActiveSection(sectionId) {
-    if (!sectionId || sectionId === currentSectionId) return;
-    currentSectionId = sectionId;
-
-    navigationLinks.forEach((link) => {
-      const isCurrent = link.getAttribute("href") === `#${sectionId}`;
-      link.classList.toggle("is-active", isCurrent);
-      if (isCurrent) link.setAttribute("aria-current", "location");
+    navLinks.forEach((link) => {
+      const active = link.hash === `#${sectionId}`;
+      link.classList.toggle("is-active", active);
+      if (active) link.setAttribute("aria-current", "location");
       else link.removeAttribute("aria-current");
     });
   }
 
-  function updateProcess(markerPosition) {
-    if (!processTrack || processCenters.length === 0) return;
-
-    const firstCenter = processCenters[0];
-    const lastCenter = processCenters[processCenters.length - 1];
-    const distance = Math.max(lastCenter - firstCenter, 1);
-    const progress = Math.min(Math.max((markerPosition - firstCenter) / distance, 0), 1);
-    processTrack.style.setProperty("--process-progress", progress.toFixed(4));
-
-    let activeIndex = 0;
-    processCenters.forEach((center, index) => {
-      if (markerPosition >= center - 24) activeIndex = index;
-    });
-
-    processSteps.forEach((step, index) => {
-      const isActive = index === activeIndex;
-      step.classList.toggle("is-active", isActive);
-      if (isActive) step.setAttribute("aria-current", "step");
-      else step.removeAttribute("aria-current");
-    });
-  }
-
-  function updateScrollUI() {
-    scheduledFrame = 0;
+  function update() {
+    frame = 0;
     const scrollTop = window.scrollY;
-    const activationPoint = scrollTop + window.innerHeight * 0.42;
-    const processMarker = scrollTop + window.innerHeight * 0.56;
-    const scrollableHeight = document.documentElement.scrollHeight - window.innerHeight;
-    const pageProgress = scrollableHeight > 0 ? scrollTop / scrollableHeight : 0;
+    const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+    const activationPoint = scrollTop + window.innerHeight * 0.38;
+    let activeId = sections[0]?.id || "";
 
-    header?.classList.toggle("is-scrolled", scrollTop > 12);
-    if (progressBar) {
-      progressBar.style.transform = `scaleX(${Math.min(Math.max(pageProgress, 0), 1)})`;
+    sections.forEach((section) => {
+      const top = section.getBoundingClientRect().top + scrollTop;
+      if (top <= activationPoint) activeId = section.id;
+    });
+
+    if (scrollTop + window.innerHeight >= document.documentElement.scrollHeight - 4) {
+      activeId = sections.at(-1)?.id || activeId;
     }
 
-    let activeSection = sectionPositions[0]?.id || "";
-    sectionPositions.forEach((section) => {
-      if (section.top <= activationPoint) activeSection = section.id;
-    });
-
-    setActiveSection(activeSection);
-    updateProcess(processMarker);
+    header?.classList.toggle("is-scrolled", scrollTop > 10);
+    if (progress) {
+      const ratio = scrollable > 0 ? scrollTop / scrollable : 0;
+      progress.style.transform = `scaleX(${Math.min(Math.max(ratio, 0), 1)})`;
+    }
+    updateNavigation(activeId);
   }
 
-  function requestScrollUpdate() {
-    if (scheduledFrame) return;
-    scheduledFrame = window.requestAnimationFrame(updateScrollUI);
+  function requestUpdate() {
+    if (frame) return;
+    frame = window.requestAnimationFrame(update);
   }
 
-  function remeasure() {
-    measurePage();
-    requestScrollUpdate();
-  }
-
-  measurePage();
-  updateScrollUI();
-
-  window.addEventListener("scroll", requestScrollUpdate, { passive: true });
-  window.addEventListener("resize", remeasure);
-  window.addEventListener("load", remeasure, { once: true });
-
-  if ("ResizeObserver" in window) {
-    const pageResizeObserver = new ResizeObserver(remeasure);
-    pageResizeObserver.observe(document.body);
-  }
-}
-
-function initCardGlow() {
-  const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
-  if (!finePointer.matches) return;
-
-  document.querySelectorAll(".capability-card").forEach((card) => {
-    card.addEventListener("pointermove", (event) => {
-      const rect = card.getBoundingClientRect();
-      card.style.setProperty("--pointer-x", `${event.clientX - rect.left}px`);
-      card.style.setProperty("--pointer-y", `${event.clientY - rect.top}px`);
-    });
-  });
+  update();
+  window.addEventListener("scroll", requestUpdate, { passive: true });
+  window.addEventListener("resize", requestUpdate);
+  window.addEventListener("load", requestUpdate, { once: true });
 }
 
 function initLocalTime() {
-  const timeElement = document.querySelector("[data-local-time]");
-  if (!timeElement || !("Intl" in window)) return;
+  const time = document.querySelector("[data-local-time]");
+  if (!time || !("Intl" in window)) return;
 
-  const formatter = new Intl.DateTimeFormat("vi-VN", {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Ho_Chi_Minh",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false
   });
 
-  const updateTime = () => {
-    timeElement.textContent = `${formatter.format(new Date())} · GMT+7`;
+  const update = () => {
+    time.textContent = `${formatter.format(new Date())} GMT+7`;
   };
 
-  updateTime();
-  window.setInterval(updateTime, 60_000);
+  update();
+  window.setInterval(update, 60_000);
 }
 
-applyContactDetails();
+function initCurrentYear() {
+  document.querySelectorAll("[data-current-year]").forEach((element) => {
+    element.textContent = String(new Date().getFullYear());
+  });
+}
+
 initMobileMenu();
+initRevealMotion();
 initScrollUI();
-initCardGlow();
 initLocalTime();
-initMotion();
+initCurrentYear();
